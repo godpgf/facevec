@@ -74,4 +74,4 @@ def net(path_to_fie_net, input_image):
             dims = get_shape(network)
             feature = tf.matmul(tf.reshape(network, [dims[0], np.prod(dims[1:])]), w) + b
 
-    return feature
+    return tf.nn.l2_normalize(feature, axis=1)
