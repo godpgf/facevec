@@ -12,11 +12,11 @@ The best performing model has been trained on the [VGGFace2](https://www.robots.
 > python align_dataset_mtcnn.py ../../../lfw ../../test_data 
 
 ## 训练
-> cd facevec
+> cd facevec  
 > python train.py sphere_cos_softmax ../../data/filelist.txt
 
 ## 测试
-> cd facevec
+> cd facevec  
 > python evaluate.py sphere_cos_softmax ../../test_data/filelist.txt
 
 
