@@ -1,6 +1,5 @@
 from data_pipeline import ImageFileDataPipeline
 from models import Sphere
-from models.mobilenet import mobilenet_v3_large
 import argparse
 import tensorflow as tf
 import logging
@@ -126,9 +125,7 @@ if __name__ == '__main__':
                                               flipud=args.flipud, rotate=args.rotate, brightness=args.brightness,
                                               contrast=args.contrast, hue=args.hue, satu=args.satu,
                                               nthreads=args.data_threads)
-
-        # feature = Sphere.inference(data_pipeline.samples["image_input"], args.embedding_size)
-        feature, _ = mobilenet_v3_large(tf.image.resize_images(data_pipeline.samples["image_input"], (128, 128)), args.embedding_size)
+        feature = Sphere.inference(data_pipeline.samples["image_input"], args.embedding_size)
         logits, loss = Sphere.cos_loss(feature, data_pipeline.samples["image_label"],
                                                     data_pipeline.samples["num_cls"], args.batch_size)
 

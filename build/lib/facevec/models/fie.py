@@ -72,7 +72,6 @@ def net(path_to_fie_net, input_image):
             w = data[pre_name + "/dense/kernel"]
             b = data[pre_name + "/dense/bias"]
             dims = get_shape(network)
-            feature = tf.matmul(tf.reshape(network, [dims[0], np.prod(dims[1:])]),
-                                tf.constant(w)) + tf.constant(b, shape=(b.shape[1],))
+            feature = tf.matmul(tf.reshape(network, [dims[0], np.prod(dims[1:])]), w) + b
 
-            return tf.nn.l2_normalize(feature, axis=1)
+    return tf.nn.l2_normalize(feature, axis=1)
