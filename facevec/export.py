@@ -16,8 +16,9 @@ if __name__ == "__main__":
 
     # 然后，使reader变换成类似于dict形式的数据
     var_dict = model_reader.get_variable_to_shape_map()
-    # for key, value in var_dict.items():
-    #     print(key)
+    for key, value in var_dict.items():
+        print(key)
+    assert False
     layers = (
         "sphere/conv1_/conv1/conv2d/kernel",
         "sphere/conv1_/conv1/conv2d/bias",

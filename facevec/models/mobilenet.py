@@ -30,16 +30,24 @@ def hard_sigmoid(x, name='hard_sigmoid'):
 
 def _dwise_conv(inputs, k_h=3, k_w=3, depth_multiplier=1, strides=(1, 1),
                 padding='SAME', name='dwise_conv', use_bias=False,
-                reuse=None):
+                reuse=None, data_dict=None):
     kernel_size = (k_w, k_h)
     in_channel = inputs.get_shape().as_list()[-1]
     filters = int(in_channel * depth_multiplier)
-    return tf.layers.separable_conv2d(inputs, filters, kernel_size,
-                                      strides=strides, padding=padding,
-                                      data_format='channels_last', dilation_rate=(1, 1),
-                                      depth_multiplier=depth_multiplier, activation=None,
-                                      use_bias=use_bias, name=name, reuse=reuse
-                                      )
+    if data_dict is None:
+        conv = tf.layers.separable_conv2d(inputs, filters, kernel_size,
+                                          strides=strides, padding=padding,
+                                          data_format='channels_last', dilation_rate=(1, 1),
+                                          depth_multiplier=depth_multiplier, activation=None,
+                                          use_bias=use_bias, name=name, reuse=reuse
+                                          )
+    else:
+        variable_scope_name = tf.get_variable_scope().name + "/" + name
+        conv = tf.nn.separable_conv2d(inputs, depthwise_filter=data_dict["%s/depthwise_kernel" % variable_scope_name], pointwise_filter=data_dict["%s/pointwise_kernel" % variable_scope_name], strides=(1, strides[0], strides[1], 1), padding=padding, data_format="channels_last", name=name)
+        if use_bias:
+            bias = data_dict["%s/bias" % variable_scope_name]
+            conv = tf.nn.bias_add(conv, tf.constant(bias, shape=(bias.shape[1],)))
+    return conv
 
 
 def _fully_connected_layer(inputs, units, name="fc", activation=None, use_bias=True, reuse=None):
@@ -54,7 +62,7 @@ def _global_avg(inputs, pool_size, strides, padding='valid', name='global_avg'):
 
 
 # 对残差进行缩放或者激励
-def _squeeze_excitation_layer(input, out_dim, ratio, layer_name, reuse=None):
+def _squeeze_excitation_layer(input, out_dim, ratio, layer_name, reuse=None, data_dict=None):
     with tf.variable_scope(layer_name, reuse=reuse):
         squeeze = _global_avg(input, pool_size=input.get_shape()[1:-1], strides=1)
 
@@ -80,19 +88,26 @@ def _batch_normalization_layer(inputs, momentum=0.997, epsilon=1e-3, is_training
                                          reuse=reuse)
 
 
-def _conv2d_layer(inputs, filters_num, kernel_size, name, use_bias=False, strides=1, reuse=None, padding="SAME"):
-    conv = tf.layers.conv2d(
-        inputs=inputs, filters=filters_num,
-        kernel_size=kernel_size, strides=[strides, strides], kernel_initializer=tf.glorot_uniform_initializer(),
-        padding=padding,
-        kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=5e-4), use_bias=use_bias, name=name,
-        reuse=reuse)
+def _conv2d_layer(inputs, filters_num, kernel_size, name, use_bias=False, strides=1, reuse=None, padding="SAME", data_dict=None):
+    if data_dict is None:
+        conv = tf.layers.conv2d(
+            inputs=inputs, filters=filters_num,
+            kernel_size=kernel_size, strides=[strides, strides], kernel_initializer=tf.glorot_uniform_initializer(),
+            padding=padding,
+            kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=5e-4), use_bias=use_bias, name=name,
+            reuse=reuse)
+    else:
+        variable_scope_name = tf.get_variable_scope().name + "/" + name
+        conv = tf.nn.conv2d(inputs, filter=data_dict["%s/kernel" % variable_scope_name], strides=[1, strides, strides, 1], padding=padding, name=name)
+        if use_bias:
+            bias = data_dict["%s/bias" % variable_scope_name]
+            conv = tf.nn.bias_add(conv, tf.constant(bias, shape=(bias.shape[1],)))
     return conv
 
 
 def conv_bn_relu(inputs, filters_num, kernel_size, name, use_bias=True, strides=1, batch_norm=False, is_training=True,
-                 activation=relu6, reuse=None):
-    x = _conv2d_layer(inputs, filters_num, kernel_size, name, use_bias=use_bias, strides=strides)
+                 activation=relu6, reuse=None, data_dict=None):
+    x = _conv2d_layer(inputs, filters_num, kernel_size, name, use_bias=use_bias, strides=strides, data_dict=data_dict)
     if batch_norm:
         x = _batch_normalization_layer(x, momentum=0.997, epsilon=1e-3, is_training=is_training, name=name + '/bn',
                                        reuse=reuse)
@@ -100,10 +115,10 @@ def conv_bn_relu(inputs, filters_num, kernel_size, name, use_bias=True, strides=
     return x
 
 
-def _conv_1x1_bn(inputs, filters_num, name, use_bias=True, is_training=True, reuse=None):
+def _conv_1x1_bn(inputs, filters_num, name, use_bias=True, is_training=True, reuse=None, data_dict=None):
     kernel_size = 1
     strides = 1
-    x = _conv2d_layer(inputs, filters_num, kernel_size, name=name + "/conv", use_bias=use_bias, strides=strides)
+    x = _conv2d_layer(inputs, filters_num, kernel_size, name=name + "/conv", use_bias=use_bias, strides=strides, data_dict=data_dict)
     x = _batch_normalization_layer(x, momentum=0.997, epsilon=1e-3, is_training=is_training, name=name + '/bn',
                                    reuse=reuse)
     return x
@@ -111,12 +126,12 @@ def _conv_1x1_bn(inputs, filters_num, name, use_bias=True, is_training=True, reu
 
 def mobilenet_v3_block(input, k_s, expansion_ratio, output_dim, stride, name, is_training=True,
                        use_bias=True, shortcut=True, activatation="RE", ratio=4, se=False,
-                       reuse=None):
+                       reuse=None, data_dict=None):
     bottleneck_dim = expansion_ratio
 
     with tf.variable_scope(name, reuse=reuse):
         # 先用1*1的卷积核将低纬度通道放大到高纬度通道，然后再relu（因为relu再低纬度时数据会有丢失）
-        net = _conv_1x1_bn(input, bottleneck_dim, name="pw", use_bias=use_bias)
+        net = _conv_1x1_bn(input, bottleneck_dim, name="pw", use_bias=use_bias, data_dict=data_dict)
 
         if activatation == "HS":
             net = hard_swish(net)
@@ -127,7 +142,7 @@ def mobilenet_v3_block(input, k_s, expansion_ratio, output_dim, stride, name, is
 
         # 用深度可分离卷积处理每一个通道
         net = _dwise_conv(net, k_w=k_s, k_h=k_s, strides=[stride, stride], name='dw',
-                          use_bias=use_bias, reuse=reuse)
+                          use_bias=use_bias, reuse=reuse, data_dict=data_dict)
 
         net = _batch_normalization_layer(net, momentum=0.997, epsilon=1e-3,
                                          is_training=is_training, name='dw_bn', reuse=reuse)
@@ -142,10 +157,10 @@ def mobilenet_v3_block(input, k_s, expansion_ratio, output_dim, stride, name, is
         # squeeze and excitation
         if se:
             channel = net.get_shape().as_list()[-1]
-            net = _squeeze_excitation_layer(net, out_dim=channel, ratio=ratio, layer_name='se_block')
+            net = _squeeze_excitation_layer(net, out_dim=channel, ratio=ratio, layer_name='se_block', data_dict=data_dict)
 
         # pw & linear 将高纬度的通道缩放回低纬度，不使用激活函数
-        net = _conv_1x1_bn(net, output_dim, name="pw_linear", use_bias=use_bias)
+        net = _conv_1x1_bn(net, output_dim, name="pw_linear", use_bias=use_bias, data_dict=data_dict)
 
         # element wise add, only for stride==1
         if shortcut and stride == 1:
@@ -155,7 +170,7 @@ def mobilenet_v3_block(input, k_s, expansion_ratio, output_dim, stride, name, is
     return net
 
 
-def mobilenet_v3_small(inputs, classes_num, multiplier=1.0, is_training=True, reuse=None):
+def mobilenet_v3_small(inputs, classes_num, multiplier=1.0, is_training=True, reuse=None, data_dict=None):
     end_points = {}
     layers = [
         [16, 16, 3, 2, "RE", True, 16],
@@ -178,7 +193,7 @@ def mobilenet_v3_small(inputs, classes_num, multiplier=1.0, is_training=True, re
     with tf.variable_scope('init', reuse=reuse):
         init_conv_out = make_divisible(16 * multiplier)
         x = conv_bn_relu(inputs, filters_num=init_conv_out, kernel_size=3, name='init',
-                         use_bias=False, strides=2, is_training=is_training, activation=hard_swish)
+                         use_bias=False, strides=2, is_training=is_training, activation=hard_swish, data_dict=data_dict)
 
     with tf.variable_scope("MobilenetV3_small", reuse=reuse):
         for idx, (in_channels, out_channels, kernel_size, stride, activatation, se, exp_size) in enumerate(layers):
@@ -188,15 +203,15 @@ def mobilenet_v3_small(inputs, classes_num, multiplier=1.0, is_training=True, re
             x = mobilenet_v3_block(x, kernel_size, exp_size, out_channels, stride,
                                    "bneck{}".format(idx), is_training=is_training, use_bias=True,
                                    shortcut=(in_channels == out_channels), activatation=activatation,
-                                   ratio=reduction_ratio, se=se)
+                                   ratio=reduction_ratio, se=se, data_dict=data_dict)
             end_points["bneck{}".format(idx)] = x
 
         # conv1_in = _make_divisible(96 * multiplier)
         conv1_out = make_divisible(576 * multiplier)
         x = conv_bn_relu(x, filters_num=conv1_out, kernel_size=1, name="conv1_out",
-                         use_bias=True, strides=1, is_training=is_training, activation=hard_swish)
+                         use_bias=True, strides=1, is_training=is_training, activation=hard_swish, data_dict=data_dict)
 
-        x = _squeeze_excitation_layer(x, out_dim=conv1_out, ratio=reduction_ratio, layer_name="conv1_out", reuse=None)
+        x = _squeeze_excitation_layer(x, out_dim=conv1_out, ratio=reduction_ratio, layer_name="conv1_out", reuse=None, data_dict=data_dict)
         end_points["conv1_out_1x1"] = x
 
         x = _global_avg(x, pool_size=x.get_shape()[1:-1], strides=1)
@@ -206,11 +221,11 @@ def mobilenet_v3_small(inputs, classes_num, multiplier=1.0, is_training=True, re
     with tf.variable_scope('Logits_out', reuse=reuse):
         # conv2_in = _make_divisible(576 * multiplier)
         conv2_out = make_divisible(1280 * multiplier)
-        x = _conv2d_layer(x, filters_num=conv2_out, kernel_size=1, name="conv2", use_bias=True, strides=1)
+        x = _conv2d_layer(x, filters_num=conv2_out, kernel_size=1, name="conv2", use_bias=True, strides=1, data_dict=data_dict)
         x = hard_swish(x)
         end_points["conv2_out_1x1"] = x
 
-        x = _conv2d_layer(x, filters_num=classes_num, kernel_size=1, name="conv3", use_bias=True, strides=1)
+        x = _conv2d_layer(x, filters_num=classes_num, kernel_size=1, name="conv3", use_bias=True, strides=1, data_dict=data_dict)
         logits = tf.layers.flatten(x)
         logits = tf.identity(logits, name='output')
         end_points["Logits_out"] = logits
@@ -218,7 +233,7 @@ def mobilenet_v3_small(inputs, classes_num, multiplier=1.0, is_training=True, re
     return logits, end_points
 
 
-def mobilenet_v3_large(inputs, classes_num, multiplier=1.0, is_training=True, reuse=None):
+def mobilenet_v3_large(inputs, classes_num, multiplier=1.0, is_training=True, reuse=None, data_dict=None):
     end_points = {}
     layers = [
         [16, 16, 3, 1, "RE", False, 16],
@@ -247,7 +262,7 @@ def mobilenet_v3_large(inputs, classes_num, multiplier=1.0, is_training=True, re
     with tf.variable_scope('init', reuse=reuse):
         init_conv_out = make_divisible(16 * multiplier)
         x = conv_bn_relu(inputs, filters_num=init_conv_out, kernel_size=3, name='init',
-                          use_bias=False, strides=2, is_training=is_training, activation=hard_swish)
+                          use_bias=False, strides=2, is_training=is_training, activation=hard_swish, data_dict=data_dict)
 
     with tf.variable_scope("MobilenetV3_large", reuse=reuse):
         for idx, (in_channels, out_channels, kernel_size, stride, activatation, se, exp_size) in enumerate(layers):
@@ -257,13 +272,13 @@ def mobilenet_v3_large(inputs, classes_num, multiplier=1.0, is_training=True, re
             x = mobilenet_v3_block(x, kernel_size, exp_size, out_channels, stride,
                                    "bneck{}".format(idx), is_training=is_training, use_bias=True,
                                    shortcut=(in_channels==out_channels), activatation=activatation,
-                                   ratio=reduction_ratio, se=se)
+                                   ratio=reduction_ratio, se=se, data_dict=data_dict)
             end_points["bneck{}".format(idx)] = x
 
         conv1_in = make_divisible(160 * multiplier)
         conv1_out = make_divisible(960 * multiplier)
         x = conv_bn_relu(x, filters_num=conv1_out, kernel_size=1, name="conv1_out",
-                          use_bias=True, strides=1, is_training=is_training, activation=hard_swish)
+                          use_bias=True, strides=1, is_training=is_training, activation=hard_swish, data_dict=data_dict)
         end_points["conv1_out_1x1"] = x
 
         x = _global_avg(x, pool_size=x.get_shape()[1:-1], strides=1)
@@ -273,11 +288,11 @@ def mobilenet_v3_large(inputs, classes_num, multiplier=1.0, is_training=True, re
     with tf.variable_scope('Logits_out', reuse=reuse):
         conv2_in = make_divisible(960 * multiplier)
         conv2_out = make_divisible(1280 * multiplier)
-        x = _conv2d_layer(x, filters_num=conv2_out, kernel_size=1, name="conv2", use_bias=True, strides=1)
+        x = _conv2d_layer(x, filters_num=conv2_out, kernel_size=1, name="conv2", use_bias=True, strides=1, data_dict=data_dict)
         x = hard_swish(x)
         end_points["conv2_out_1x1"] = x
 
-        x = _conv2d_layer(x, filters_num=classes_num, kernel_size=1, name="conv3", use_bias=True, strides=1)
+        x = _conv2d_layer(x, filters_num=classes_num, kernel_size=1, name="conv3", use_bias=True, strides=1, data_dict=data_dict)
         logits = tf.layers.flatten(x)
         logits = tf.identity(logits, name='output')
         end_points["Logits_out"] = logits

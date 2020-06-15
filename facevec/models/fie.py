@@ -30,6 +30,7 @@ def first_conv(input, name, data, pre_name):
 
 def block(input, name, data, pre_name):
     with tf.variable_scope(name):
+        tf.get_variable_scope()
         pre_name += "/%s" % name
         network = tf.nn.conv2d(input, tf.constant(data[pre_name + "/conv2d/kernel"]), strides=(1, 1, 1, 1), padding='SAME')
         network = prelu(network, 'name1', data, pre_name)
