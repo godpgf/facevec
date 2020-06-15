@@ -5,8 +5,7 @@ import os
 import cv2
 import skimage
 from models import Sphere
-from models import fie
-from models.mobilenet import mobilenet_v3_large
+import scipy.io
 
 from scipy import misc
 from eval.utils import calculate_roc, calculate_tar
@@ -75,11 +74,13 @@ if __name__ == '__main__':
     with graph.as_default():
         with tf.Session() as sess:
             img_pair_ph = tf.placeholder(tf.float32, [2, args.height, args.width, 3])
+            img_pair_embds = Sphere.inference(img_pair_ph, args.embedding_size)
             if args.checkpoint_dir.endswith(".mat"):
-                img_pair_embds = fie.net(args.checkpoint_dir, tf.image.resize_images(img_pair_ph, [128, 128]))
+                data = scipy.io.loadmat(args.checkpoint_dir)
+                for key, value in data.items():
+                    var = tf.get_variable(key)
+                    sess.run(var.assign(data))
             else:
-                img_pair_embds = Sphere.inference(img_pair_ph, args.embedding_size)
-                # img_pair_embds, _ = mobilenet_v3_large(tf.image.resize_images(img_pair_ph, [128, 128]), args.embedding_size)
                 # 部分加载模型
                 variables = tf.contrib.framework.get_variables_to_restore()
                 saver = tf.train.Saver(variables)
