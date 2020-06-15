@@ -78,8 +78,8 @@ if __name__ == '__main__':
             if args.checkpoint_dir.endswith(".mat"):
                 img_pair_embds = fie.net(args.checkpoint_dir, tf.image.resize_images(img_pair_ph, [128, 128]))
             else:
-                # img_pair_embds = Sphere.inference(img_pair_ph, args.embedding_size)
-                img_pair_embds, _ = mobilenet_v3_large(tf.image.resize_images(img_pair_ph, [128, 128]), args.embedding_size)
+                img_pair_embds = Sphere.inference(img_pair_ph, args.embedding_size)
+                # img_pair_embds, _ = mobilenet_v3_large(tf.image.resize_images(img_pair_ph, [128, 128]), args.embedding_size)
                 # 部分加载模型
                 variables = tf.contrib.framework.get_variables_to_restore()
                 saver = tf.train.Saver(variables)
