@@ -1,6 +1,5 @@
 from data_pipeline import ImageFileDataPipeline
 from models import Sphere
-from models.mobilenet import mobilenet_v3_large
 import argparse
 import tensorflow as tf
 import logging
