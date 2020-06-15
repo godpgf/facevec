@@ -128,7 +128,7 @@ class ImageFileDataPipeline(DataPipeline):
             dataset = dataset.repeat()
 
         if self.shuffle:
-            dataset = dataset.shuffle(3)
+            dataset = dataset.shuffle(self.batch_size * 3)
 
         def _parse_function(input_file, label):
             input_file = tf.read_file(input_file)
