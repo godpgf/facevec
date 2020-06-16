@@ -56,11 +56,14 @@ if __name__ == '__main__':
         with tf.Session() as sess:
             img_pair_ph = tf.placeholder(tf.float32, [2, args.height, args.width, 3])
             img_pair_embds = Sphere.inference(img_pair_ph, args.embedding_size)
-            if args.checkpoint_dir.endswith(".mat"):
-                data = scipy.io.loadmat(args.checkpoint_dir)
-                for key, value in data.items():
-                    var = tf.get_variable(key)
-                    sess.run(var.assign(data))
+            if args.checkpoint_dir.endswith(".npy"):
+                data = np.load(args.checkpoint_dir, allow_pickle=True)
+                with tf.variable_scope("sphere", reuse=tf.AUTO_REUSE):
+                    data = data.item()
+                    for key, value in data.items():
+                        var = tf.get_variable(key.replace("sphere/", ""))
+                        print(key, ":", value.shape, "--->", var.get_shape().as_list())
+                        sess.run(var.assign(value))
             else:
                 # 部分加载模型
                 variables = tf.contrib.framework.get_variables_to_restore()

@@ -1,8 +1,8 @@
 from tensorflow.python import pywrap_tensorflow
 import argparse
 import tensorflow as tf
-import scipy.io as sio
 import os
+import numpy as np
 
 parser = argparse.ArgumentParser()
 req_grp = parser.add_argument_group('required')
@@ -77,5 +77,5 @@ if __name__ == "__main__":
         assert layer in var_dict
         fie[layer] = model_reader.get_tensor(layer)
 
-    sio.savemat(os.path.join(args.model_path, "fie.mat"), fie)
+    np.save(os.path.join(args.model_path, "fie.npy"), fie)
     # print(sio.loadmat(os.path.join(args.model_path, "fie.mat"))[layers[2]])
