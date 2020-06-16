@@ -79,6 +79,7 @@ if __name__ == '__main__':
                 data = scipy.io.loadmat(args.checkpoint_dir)
                 for key, value in data.items():
                     var = tf.get_variable(key)
+                    print(key, ":", data.shape, "--->", var.get_shape().as_list())
                     sess.run(var.assign(data))
             else:
                 # 部分加载模型
