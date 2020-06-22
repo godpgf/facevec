@@ -68,17 +68,19 @@ def get_image_paths(facedir):
 
 def get_dataset(path, has_class_directories=True):
     dataset = []
-    path_exp = os.path.expanduser(path)
-    classes = [path for path in os.listdir(path_exp) \
-               if os.path.isdir(os.path.join(path_exp, path))]
-    classes.sort()
-    nrof_classes = len(classes)
-    for i in range(nrof_classes):
-        class_name = classes[i]
-        facedir = os.path.join(path_exp, class_name)
-        image_paths = get_image_paths(facedir)
-        dataset.append(ImageClass(class_name, image_paths))
-
+    if has_class_directories:
+        path_exp = os.path.expanduser(path)
+        classes = [path for path in os.listdir(path_exp) \
+                   if os.path.isdir(os.path.join(path_exp, path))]
+        classes.sort()
+        nrof_classes = len(classes)
+        for i in range(nrof_classes):
+            class_name = classes[i]
+            facedir = os.path.join(path_exp, class_name)
+            image_paths = get_image_paths(facedir)
+            dataset.append(ImageClass(class_name, image_paths))
+    else:
+        dataset.append(ImageClass("img", path))
     return dataset
 
 
@@ -118,7 +120,7 @@ def main(args):
     # Store some git revision info in a text file in the log directory
     src_path, _ = os.path.split(os.path.realpath(__file__))
     store_revision_info(src_path, output_dir, ' '.join(sys.argv))
-    dataset = get_dataset(args.input_dir)
+    dataset = get_dataset(args.input_dir, args.has_class_directories)
 
     print('Creating networks and loading parameters')
 
@@ -235,6 +237,8 @@ def parse_arguments(argv):
                         help='Upper bound on the amount of GPU memory that will be used by the process.', default=1.0)
     parser.add_argument('--detect_multiple_faces', type=bool,
                         help='Detect and align multiple faces per image.', default=False)
+    parser.add_argument('--has_class_directories', type=bool,
+                        help='no class', default=False)
     return parser.parse_args(argv)
 
 
