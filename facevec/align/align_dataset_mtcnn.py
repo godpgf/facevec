@@ -80,7 +80,7 @@ def get_dataset(path, has_class_directories=True):
             image_paths = get_image_paths(facedir)
             dataset.append(ImageClass(class_name, image_paths))
     else:
-        dataset.append(ImageClass("img", path))
+        dataset.append(ImageClass("img", get_image_paths(path)))
     return dataset
 
 
@@ -238,7 +238,7 @@ def parse_arguments(argv):
     parser.add_argument('--detect_multiple_faces', type=bool,
                         help='Detect and align multiple faces per image.', default=False)
     parser.add_argument('--has_class_directories', type=bool,
-                        help='no class', default=False)
+                        help='no class', default=True)
     return parser.parse_args(argv)
 
 
